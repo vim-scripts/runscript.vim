@@ -1,7 +1,7 @@
 " Vim global plugin for running Python scripts
-" Version: 1.0
+" Version: 1.1
 " Maintainer: Frederick Young <lordfyb@hotmail.com>
-" Last change: 2001 Oct 21 
+" Last change: 2001 Oct 30 
 "
 "*******************************************************************************
 "
@@ -23,10 +23,8 @@
 "   The above will run the script in the current buffer or the one designated
 "   to run when pressing "F11" and pass to it the parameters "-xy 800 600"
 "
-" --Typing the Ex command "Sb" will display a buffer containing the output
+" --Pressing "F9" will toggle the display of a buffer containing the output
 "   produced when running the Ex command "Rs" or pressing "F12".
-"   Unfortunately, I have not figured out how to capture compiler errors.  Oh
-"   well.  Someday...
 "
 "   With some minor modifications, it should be possible to run other scripts
 "   like perl, vbscript, or even executables compiled with the Ex command
@@ -45,6 +43,9 @@ let s:PathToExecutable = 'c:\py21\python.exe'
 " Ex command "Rs"
 let s:mainfile = ""
 
+let s:flag = 0
+let @a = ""
+
 " Map keys to function calls
 if !hasmapto('<Plug>RunScript')
   nmap <unique> <silent> <F12> <Plug>ExecuteScript
@@ -55,58 +56,83 @@ endif
 if !hasmapto('<Plug>ClearMainScript')
   nmap <unique> <silent> <S-F11> <Plug>ClearMainScript
 endif
+if !hasmapto('<Plug>ToggleOutputWindow')
+  nmap <unique> <silent> <F9> <Plug>ToggleOutputWindow
+endif
 
 " The main plug-in mapping.
 nmap <script> <silent> <Plug>ExecuteScript :call <SID>ExecuteScript()<CR>
 nmap <script> <silent> <Plug>SetMainScript :call <SID>SetMainScript()<CR>
 nmap <script> <silent> <Plug>ClearMainScript :call <SID>ClearMainScript()<CR>
+nmap <script> <silent> <Plug>ToggleOutputWindow :call <SID>ToggleOutputWindow()<CR>
 
-function! s:SetMainScript()
+function s:SetMainScript()
 	let s:mainfile = bufname('%')
 	echo s:mainfile . ' set as the starting program.'
 endfunction
 
-function! s:ClearMainScript()
+function s:ClearMainScript()
 	echo s:mainfile . ' is no longer the starting program.'
 	let s:mainfile = ""
 endfunction
 
-function! s:ExecuteScript()
+function s:ExecuteScript()
 	" Execute script
 	if strlen(s:mainfile) > 0
 		let @a = system(s:PathToExecutable . ' ' . s:mainfile)
 	else
 		let @a = system(s:PathToExecutable . ' ' . bufname('%'))
 	endif
+	"bdelete "Output window"
+	call s:ShowOutputInBuffer()
 endfunction
 
+function s:ToggleOutputWindow()
+	if s:flag == 0
+		let s:flag = 1
+		silent rightbelow new Output window
+		resize 7
+		set buftype=nofile		
+		silent normal "aP
+	elseif s:flag == 1
+		let s:flag = 0
+		if bufexists("Output window") > 0
+			silent! bwipeout Output window
+		endif
+		let @a = ""
+	endif
+endfunction
 
 " Ex command which take 0 or more ( up to 20 ) parameters
-command! -nargs=* Rs call ExecuteScript(<f-args>)
+command -nargs=* Rs call s:CLExecuteScript(<f-args>)
 
-function ExecuteScript(...)
+function s:CLExecuteScript(...)
 	let index = 1
-	let s:params = ""
+	let params = ""
 	" Assemble the paramters to pass to the Python script
 	while index <= a:0
-		execute 'let s:params = s:params . " " . a:' . index
+		execute 'let params = params . " " . a:' . index
 		let index = index + 1
 	endwhile
 	" Execute script (with parameters if provided)
 	if strlen(s:mainfile) > 0
-		let @a = system(s:PathToExecutable . ' ' . s:mainfile . s:params)
+		let @a = system(s:PathToExecutable . ' ' . s:mainfile . params)
 	else
-		let @a = system(s:PathToExecutable . ' ' . bufname('%') . s:params)
+		let @a = system(s:PathToExecutable . ' ' . bufname('%') . params)
 	endif
+	"bdelete "Output window"
+	call s:ShowOutputInBuffer()
 endfunction
 
-" Ex command will show the output produced when calling the Ex command "Rs" or
-" pressing "F12"
-command! -nargs=0 Sb call ShowOutputBuffer()
-
 " Display a buffer containing the contents of register "a"
-function ShowOutputBuffer()
-	new
-	set buftype=nofile
-	silent normal "aP
+function s:ShowOutputInBuffer()
+	if s:flag == 1
+		if bufexists("Output window") > 0
+			silent! bwipeout Output window
+		endif	
+		silent botright new Output window
+		resize 7
+		set buftype=nofile		
+		silent normal "aP
+	endif
 endfunction
